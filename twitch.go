@@ -51,7 +51,7 @@ func getCoolHeader(name string, r *http.Request) (string, error) {
 	return val[0], nil
 }
 
-func verifyWebhook(r *http.Request, requestBody []byte, hmacKey []byte) bool {
+func verifyWebhook(r *http.Request, requestBody []byte, hmacKeys [][]byte) bool {
 	signatures, err := getCoolHeader("Twitch-Eventsub-Message-Signature", r)
 	if err != nil {
 		log.Println(err)
@@ -96,21 +96,17 @@ func verifyWebhook(r *http.Request, requestBody []byte, hmacKey []byte) bool {
 		log.Println(err)
 		return false
 	}
-
-	hmac := hmac.New(hasher, hmacKey)
-	hmac.Write([]byte(msgId))
-	hmac.Write([]byte(timestamp))
-	hmac.Write(requestBody)
-	expectedMAC := hmac.Sum(nil)
-	ret := true
-	//don't bail before checking all the bytes, it leads to a timing attack
-	for i := range(signature) {
-		if expectedMAC[i] != signature[i] {
-			ret = false
-			log.Printf("byte %d didn't match\n", i)
+	for _, hmacKey := range hmacKeys {
+		hmac := hmac.New(hasher, hmacKey)
+		hmac.Write([]byte(msgId))
+		hmac.Write([]byte(timestamp))
+		hmac.Write(requestBody)
+		expectedMAC := hmac.Sum(nil)
+		if hmac.Equal(expectedMAC, signature) {
+			return true
 		}
 	}
-	return ret
+	 return false
 }
 
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +116,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hmacKey := []byte(os.Getenv("sub_secret"))
+	hmacKey := [][]byte{[]byte(os.Getenv("sub_secret")), []byte(os.Getenv("dom_secret"))}
 	if !verifyWebhook(r, requestBody, hmacKey) {
 		log.Println("failed to verify signature")
 		w.Write([]byte("you're my good puppy\n"))
