@@ -116,7 +116,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hmacKeys := [][]byte{[]byte(os.Getenv("dom_secret")), []byte(os.Getenv("sub_secret"))}
+	hmacKeys := [][]byte{[]byte(os.Getenv("dom_secret")), []byte(os.Getenv("sub_secret")), []byte("puppy")}
 	if !verifyWebhook(r, requestBody, hmacKeys) {
 		log.Println("failed to verify signature")
 		w.Write([]byte("you're my good puppy\n"))
