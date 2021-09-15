@@ -48,6 +48,12 @@ const (
 	scrollo
 	unknown
 )
+const (
+	signatureHeader = "Twitch-Eventsub-Message-Signature"
+	timestampHeader = "Twitch-Eventsub-Message-Timestamp"
+	msgIdHeader     = "Twitch-Eventsub-Message-Id"
+	msgTypeHeader   = "Twitch-Eventsub-Message-Type"
+)
 
 func rewardFromString(s string) reward {
 	switch s {
@@ -73,8 +79,8 @@ type hmacKey struct {
 
 var ceilingBulb, bedBulb *golifx.Bulb
 
-func getCoolHeader(name string, r *http.Request) (string, error) {
-	val, ok := r.Header[name]
+func getCoolHeader(name string, h http.Header) (string, error) {
+	val, ok := h[name]
 	if !ok {
 		return "", fmt.Errorf("missing header %s", name)
 	}
@@ -84,8 +90,8 @@ func getCoolHeader(name string, r *http.Request) (string, error) {
 	return val[0], nil
 }
 
-func verifyWebhook(r *http.Request, requestBody []byte, hmacKeys []hmacKey) []reward {
-	signatures, err := getCoolHeader("Twitch-Eventsub-Message-Signature", r)
+func verifyWebhook(h http.Header, requestBody []byte, hmacKeys []hmacKey) []reward {
+	signatures, err := getCoolHeader(signatureHeader, h)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -118,13 +124,13 @@ func verifyWebhook(r *http.Request, requestBody []byte, hmacKeys []hmacKey) []re
 		return nil
 	}
 
-	timestamp, err := getCoolHeader("Twitch-Eventsub-Message-Timestamp", r)
+	timestamp, err := getCoolHeader(timestampHeader, h)
 	if err != nil {
 		log.Println(err)
 		return nil
 	}
 
-	msgId, err := getCoolHeader("Twitch-Eventsub-Message-Id", r)
+	msgId, err := getCoolHeader(msgIdHeader, h)
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -210,13 +216,13 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 	domKey := hmacKey{[]byte(os.Getenv("dom_secret")), []reward{lights, scrollo}}
 	subKey := hmacKey{[]byte(os.Getenv("sub_secret")), []reward{lights, endStream, silenceMe, premium, scrollo, unknown}}
 	hmacKeys := []hmacKey{domKey, subKey}
-	permissions := verifyWebhook(r, requestBody, hmacKeys)
+	permissions := verifyWebhook(r.Header, requestBody, hmacKeys)
 	if permissions == nil {
 		log.Println("failed to verify signature")
 		w.Write([]byte("you're my good puppy\n"))
 		return
 	}
-	msgType, err := getCoolHeader("Twitch-Eventsub-Message-Type", r)
+	msgType, err := getCoolHeader(msgTypeHeader, r.Header)
 	if err != nil {
 		log.Println(err)
 		return
